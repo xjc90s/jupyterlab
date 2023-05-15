@@ -15,12 +15,16 @@ import {
 import { IDisposable } from '@lumino/disposable';
 import { ISignal } from '@lumino/signaling';
 import { ISchemaValidator } from './settingregistry';
+import type { RJSFSchema, UiSchema } from '@rjsf/utils';
 
 /**
  * The setting registry token.
  */
 export const ISettingRegistry = new Token<ISettingRegistry>(
-  '@jupyterlab/coreutils:ISettingRegistry'
+  '@jupyterlab/coreutils:ISettingRegistry',
+  `A service for the JupyterLab settings system.
+  Use this if you want to store settings for your application.
+  See "schemaDir" for more information.`
 );
 
 /**
@@ -76,10 +80,15 @@ export interface ISettingRegistry {
    *
    * @param plugin - The name of the plugin whose settings are being loaded.
    *
+   * @param forceTransform - An optional parameter to force replay the transforms methods.
+   *
    * @returns A promise that resolves with a plugin settings object or rejects
    * if the plugin is not found.
    */
-  load(plugin: string): Promise<ISettingRegistry.ISettings>;
+  load(
+    plugin: string,
+    forceTransform?: boolean
+  ): Promise<ISettingRegistry.ISettings>;
 
   /**
    * Reload a plugin's settings into the registry even if they already exist.
@@ -625,19 +634,13 @@ export namespace ISettingRegistry {
 
     /**
      * The metadata schema.
-     *
-     * ## Notes:
-     * To change to type @rjsf/utils -> RJSFSchema when upgrading rjsf to v5.
      */
     metadataSchema: IMetadataSchema;
 
     /**
      * The ui schema as used by react-JSON-schema-form.
-     *
-     * ## Notes:
-     * To change to type @rjsf/utils -> UiSchema when upgrading rjsf to v5.
      */
-    uiSchema?: { [metadataKey: string]: PartialJSONObject };
+    uiSchema?: { [metadataKey: string]: UiSchema };
 
     /**
      * The jupyter properties.
@@ -667,16 +670,8 @@ export namespace ISettingRegistry {
 
   /**
    * The metadata schema as defined in JSON schema.
-   *
-   * ## Notes:
-   * To remove in favour of @rjsf/utils -> RJSFSchema when upgrading rjsf to v5.
    */
-  export interface IMetadataSchema extends PartialJSONObject {
-    /**
-     * The type of data (should be object at first level).
-     */
-    type: string;
-
+  export interface IMetadataSchema extends RJSFSchema {
     /**
      * The properties as defined in JSON schema, and interpretable by react-JSON-schema-form.
      */

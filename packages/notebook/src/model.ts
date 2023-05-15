@@ -101,25 +101,35 @@ export class NotebookModel implements INotebookModel {
    * Construct a new notebook model.
    */
   constructor(options: NotebookModel.IOptions = {}) {
-    const sharedModel = (this.sharedModel = new YNotebook({
-      disableDocumentWideUndoRedo: options.disableDocumentWideUndoRedo ?? false
-    }));
+    this.standaloneModel = typeof options.sharedModel === 'undefined';
+
+    if (options.sharedModel) {
+      this.sharedModel = options.sharedModel;
+    } else {
+      this.sharedModel = YNotebook.create({
+        disableDocumentWideUndoRedo:
+          options.disableDocumentWideUndoRedo ?? true,
+        data: {
+          nbformat: nbformat.MAJOR_VERSION,
+          nbformat_minor: nbformat.MINOR_VERSION,
+          metadata: {
+            kernelspec: { name: '', display_name: '' },
+            language_info: { name: options.languagePreference ?? '' }
+          }
+        }
+      });
+    }
+
     this._cells = new CellList(this.sharedModel);
     this._trans = (options.translator || nullTranslator).load('jupyterlab');
     this._deletedCells = [];
     this._collaborationEnabled = !!options?.collaborationEnabled;
 
-    // Initialize the notebook
-    // In collaboration mode, this will be overridden by the initialization coming
-    // from the document provider.
-    sharedModel.nbformat_minor = nbformat.MINOR_VERSION;
-    sharedModel.nbformat = nbformat.MAJOR_VERSION;
-    this._ensureMetadata(options.languagePreference ?? '');
-
-    this.sharedModel.metadataChanged.connect(this._onMetadataChanged, this);
     this._cells.changed.connect(this._onCellsChanged, this);
     this.sharedModel.changed.connect(this._onStateChanged, this);
+    this.sharedModel.metadataChanged.connect(this._onMetadataChanged, this);
   }
+
   /**
    * A signal emitted when the document content changes.
    */
@@ -252,7 +262,9 @@ export class NotebookModel implements INotebookModel {
     const cells = this.cells;
     this._cells = null!;
     cells.dispose();
-    this.sharedModel.dispose();
+    if (this.standaloneModel) {
+      this.sharedModel.dispose();
+    }
     Signal.clearData(this);
   }
 
@@ -368,9 +380,10 @@ close the notebook without saving it.`,
 
     // Ensure there is at least one cell
     if ((copy.cells?.length ?? 0) === 0) {
-      copy['cells'] = [{ cell_type: 'code', source: '', metadata: {} }];
+      copy['cells'] = [
+        { cell_type: 'code', source: '', metadata: { trusted: true } }
+      ];
     }
-
     this.sharedModel.fromJSON(copy);
 
     this._ensureMetadata();
@@ -475,6 +488,11 @@ close the notebook without saving it.`,
    */
   readonly sharedModel: ISharedNotebook;
 
+  /**
+   * Whether the model should disposed the shared model on disposal or not.
+   */
+  protected standaloneModel = false;
+
   private _dirty = false;
   private _readOnly = false;
   private _contentChanged = new Signal<this, void>(this);
@@ -495,12 +513,8 @@ export namespace NotebookModel {
   /**
    * An options object for initializing a notebook model.
    */
-  export interface IOptions {
-    /**
-     * The language preference for the model.
-     */
-    languagePreference?: string;
-
+  export interface IOptions
+    extends DocumentRegistry.IModelOptions<ISharedNotebook> {
     /**
      * Default cell type.
      */
@@ -513,12 +527,12 @@ export namespace NotebookModel {
 
     /**
      * Defines if the document can be undo/redo.
+     *
+     * Default: true
+     *
+     * @experimental
+     * @alpha
      */
     disableDocumentWideUndoRedo?: boolean;
-
-    /**
-     * Whether collaboration should be enabled for this document model.
-     */
-    collaborationEnabled?: boolean;
   }
 }

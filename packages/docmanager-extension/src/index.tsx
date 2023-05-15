@@ -20,6 +20,7 @@ import {
   InputDialog,
   ISessionContextDialogs,
   ReactWidget,
+  SessionContextDialogs,
   showDialog,
   showErrorMessage,
   UseSignal
@@ -33,7 +34,6 @@ import {
   renameDialog,
   SavingStatus
 } from '@jupyterlab/docmanager';
-import { IDocumentProviderFactory } from '@jupyterlab/docprovider';
 import { DocumentRegistry, IDocumentWidget } from '@jupyterlab/docregistry';
 import { Contents, Kernel } from '@jupyterlab/services';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
@@ -100,6 +100,7 @@ const docManagerPluginId = '@jupyterlab/docmanager-extension:plugin';
  */
 const openerPlugin: JupyterFrontEndPlugin<IDocumentWidgetOpener> = {
   id: '@jupyterlab/docmanager-extension:opener',
+  description: 'Provides the widget opener.',
   autoStart: true,
   provides: IDocumentWidgetOpener,
   activate: (app: JupyterFrontEnd) => {
@@ -134,6 +135,7 @@ const openerPlugin: JupyterFrontEndPlugin<IDocumentWidgetOpener> = {
  */
 const contextsPlugin: JupyterFrontEndPlugin<void> = {
   id: '@jupyterlab/docmanager-extension:contexts',
+  description: 'Adds the handling of opened documents dirty state.',
   autoStart: true,
   requires: [IDocumentManager, IDocumentWidgetOpener],
   optional: [ILabStatus],
@@ -162,25 +164,22 @@ const contextsPlugin: JupyterFrontEndPlugin<void> = {
  */
 const manager: JupyterFrontEndPlugin<IDocumentManager> = {
   id: '@jupyterlab/docmanager-extension:manager',
+  description: 'Provides the document manager.',
   provides: IDocumentManager,
   requires: [IDocumentWidgetOpener],
-  optional: [
-    ITranslator,
-    ILabStatus,
-    ISessionContextDialogs,
-    IDocumentProviderFactory,
-    JupyterLab.IInfo
-  ],
+  optional: [ITranslator, ILabStatus, ISessionContextDialogs, JupyterLab.IInfo],
   activate: (
     app: JupyterFrontEnd,
     widgetOpener: IDocumentWidgetOpener,
-    translator: ITranslator | null,
+    translator_: ITranslator | null,
     status: ILabStatus | null,
-    sessionDialogs: ISessionContextDialogs | null,
-    docProviderFactory: IDocumentProviderFactory | null,
+    sessionDialogs_: ISessionContextDialogs | null,
     info: JupyterLab.IInfo | null
   ) => {
     const { serviceManager: manager, docRegistry: registry } = app;
+    const translator = translator_ ?? nullTranslator;
+    const sessionDialogs =
+      sessionDialogs_ ?? new SessionContextDialogs({ translator });
     const when = app.restored.then(() => void 0);
 
     const docManager = new DocumentManager({
@@ -189,9 +188,8 @@ const manager: JupyterFrontEndPlugin<IDocumentManager> = {
       opener: widgetOpener,
       when,
       setBusy: (status && (() => status.setBusy())) ?? undefined,
-      sessionDialogs: sessionDialogs || undefined,
+      sessionDialogs,
       translator: translator ?? nullTranslator,
-      docProviderFactory: docProviderFactory ?? undefined,
       isConnectedCallback: () => {
         if (info) {
           return info.isConnected;
@@ -205,10 +203,11 @@ const manager: JupyterFrontEndPlugin<IDocumentManager> = {
 };
 
 /**
- * The default document manager provider.
+ * The default document manager provider commands and settings.
  */
 const docManagerPlugin: JupyterFrontEndPlugin<void> = {
   id: docManagerPluginId,
+  description: 'Adds commands and settings to the document manager.',
   autoStart: true,
   requires: [IDocumentManager, IDocumentWidgetOpener, ISettingRegistry],
   optional: [ITranslator, ICommandPalette, ILabShell],
@@ -369,7 +368,9 @@ Available file types:
 
     // If the document registry gains or loses a factory or file type,
     // regenerate the settings description with the available options.
-    registry.changed.connect(() => settingRegistry.reload(docManagerPluginId));
+    registry.changed.connect(() =>
+      settingRegistry.load(docManagerPluginId, true)
+    );
   }
 };
 
@@ -378,6 +379,7 @@ Available file types:
  */
 export const savingStatusPlugin: JupyterFrontEndPlugin<void> = {
   id: '@jupyterlab/docmanager-extension:saving-status',
+  description: 'Adds a saving status indicator.',
   autoStart: true,
   requires: [IDocumentManager, ILabShell],
   optional: [ITranslator, IStatusBar],
@@ -417,6 +419,7 @@ export const savingStatusPlugin: JupyterFrontEndPlugin<void> = {
  */
 export const pathStatusPlugin: JupyterFrontEndPlugin<void> = {
   id: '@jupyterlab/docmanager-extension:path-status',
+  description: 'Adds a file path indicator in the status bar.',
   autoStart: true,
   requires: [IDocumentManager, ILabShell],
   optional: [IStatusBar],
@@ -451,6 +454,7 @@ export const pathStatusPlugin: JupyterFrontEndPlugin<void> = {
  */
 export const downloadPlugin: JupyterFrontEndPlugin<void> = {
   id: '@jupyterlab/docmanager-extension:download',
+  description: 'Adds command to download files.',
   autoStart: true,
   requires: [IDocumentManager],
   optional: [ITranslator, ICommandPalette],
@@ -504,6 +508,7 @@ export const downloadPlugin: JupyterFrontEndPlugin<void> = {
  */
 export const openBrowserTabPlugin: JupyterFrontEndPlugin<void> = {
   id: '@jupyterlab/docmanager-extension:open-browser-tab',
+  description: 'Adds command to open a browser tab.',
   autoStart: true,
   requires: [IDocumentManager],
   optional: [ITranslator],
@@ -964,7 +969,28 @@ function addCommands(
             buttons: [Dialog.okButton()]
           });
         }
-        return context.saveAs();
+
+        const onChange = (
+          sender: Contents.IManager,
+          args: Contents.IChangedArgs
+        ) => {
+          if (
+            args.type === 'save' &&
+            args.newValue &&
+            args.newValue.path !== context.path
+          ) {
+            void docManager.closeFile(context.path);
+            void commands.execute(CommandIDs.open, {
+              path: args.newValue.path
+            });
+          }
+        };
+        docManager.services.contents.fileChanged.connect(onChange);
+        context
+          .saveAs()
+          .finally(() =>
+            docManager.services.contents.fileChanged.disconnect(onChange)
+          );
       }
     }
   });
@@ -1197,10 +1223,7 @@ namespace Private {
     const date = new Date(checkpoint.last_modified);
     lastCheckpointDate.style.textAlign = 'center';
     lastCheckpointDate.textContent =
-      Time.format(date, 'dddd, MMMM Do YYYY, h:mm:ss a') +
-      ' (' +
-      Time.formatHuman(date) +
-      ')';
+      Time.format(date) + ' (' + Time.formatHuman(date) + ')';
 
     lastCheckpointMessage.appendChild(lastCheckpointText);
     lastCheckpointMessage.appendChild(lastCheckpointDate);

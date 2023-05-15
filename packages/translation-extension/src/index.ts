@@ -12,7 +12,7 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
-import { Dialog, showDialog } from '@jupyterlab/apputils';
+import { Dialog, ICommandPalette, showDialog } from '@jupyterlab/apputils';
 import { IMainMenu } from '@jupyterlab/mainmenu';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import {
@@ -28,6 +28,7 @@ const PLUGIN_ID = '@jupyterlab/translation-extension:plugin';
 
 const translator: JupyterFrontEndPlugin<ITranslator> = {
   id: '@jupyterlab/translation:translator',
+  description: 'Provides the application translation object.',
   autoStart: true,
   requires: [JupyterFrontEnd.IPaths, ISettingRegistry],
   optional: [ILabShell],
@@ -69,13 +70,16 @@ const translator: JupyterFrontEndPlugin<ITranslator> = {
  */
 const langMenu: JupyterFrontEndPlugin<void> = {
   id: PLUGIN_ID,
-  requires: [IMainMenu, ISettingRegistry, ITranslator],
+  description: 'Adds translation commands and settings.',
+  requires: [ISettingRegistry, ITranslator],
+  optional: [IMainMenu, ICommandPalette],
   autoStart: true,
   activate: (
     app: JupyterFrontEnd,
-    mainMenu: IMainMenu,
     settings: ISettingRegistry,
-    translator: ITranslator
+    translator: ITranslator,
+    mainMenu: IMainMenu | null,
+    palette: ICommandPalette | null
   ) => {
     const trans = translator.load('jupyterlab');
     const { commands } = app;
@@ -95,17 +99,19 @@ const langMenu: JupyterFrontEndPlugin<void> = {
       .then(setting => {
         // Read the settings
         loadSetting(setting);
-        document.documentElement.lang = currentLocale;
+        document.documentElement.lang = (currentLocale ?? '').replace('_', '-');
 
         // Listen for your plugin setting changes using Signal
         setting.changed.connect(loadSetting);
 
         // Create a languages menu
-        const languagesMenu = mainMenu.settingsMenu.items.find(
-          item =>
-            item.type === 'submenu' &&
-            item.submenu?.id === 'jp-mainmenu-settings-language'
-        )?.submenu;
+        const languagesMenu = mainMenu
+          ? mainMenu.settingsMenu.items.find(
+              item =>
+                item.type === 'submenu' &&
+                item.submenu?.id === 'jp-mainmenu-settings-language'
+            )?.submenu
+          : null;
 
         let command: string;
 
@@ -161,6 +167,13 @@ const langMenu: JupyterFrontEndPlugin<void> = {
                 languagesMenu.addItem({
                   command,
                   args: {}
+                });
+              }
+
+              if (palette) {
+                palette.addItem({
+                  category: trans.__('Display Languages'),
+                  command
                 });
               }
             }

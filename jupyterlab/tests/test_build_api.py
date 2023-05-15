@@ -107,12 +107,11 @@ class TestBuildAPI:
         assert expected_http_error(e, 500)
 
         loop = asyncio.get_event_loop()
-        asyncio.ensure_future(build_api_tester.build(), loop=loop)
+        asyncio.ensure_future(build_api_tester.build(), loop=loop)  # noqa RUF006
 
         while True:
             r = await build_api_tester.getStatus()
             res = r.body.decode()
-            print(res)
             resp = json.loads(res)
             if resp["status"] == "building":
                 break

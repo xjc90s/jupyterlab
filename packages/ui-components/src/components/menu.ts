@@ -111,16 +111,6 @@ export class RankedMenu extends Menu implements IRankedMenu {
   }
 
   /**
-   * The underlying Lumino menu.
-   *
-   * @deprecated since v3.1
-   * RankMenu inherits from Menu since v3.1
-   */
-  get menu(): Menu {
-    return this;
-  }
-
-  /**
    * Menu rank.
    */
   get rank(): number | undefined {
@@ -160,7 +150,7 @@ export class RankedMenu extends Menu implements IRankedMenu {
     const added: IDisposableMenuItem[] = [];
 
     // Insert a separator before the group.
-    // Phosphor takes care of superfluous leading,
+    // Lumino takes care of superfluous leading,
     // trailing, and duplicate separators.
     if (this._includeSeparators) {
       added.push(

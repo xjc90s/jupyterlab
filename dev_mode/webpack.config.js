@@ -292,7 +292,7 @@ module.exports = [
         chunks: 'all',
         cacheGroups: {
           jlab_core: {
-            test: /[\\/]node_modules[\\/]@(jupyterlab|lumino)[\\/]/,
+            test: /[\\/]node_modules[\\/]@(jupyterlab|lumino(?!\/datagrid))[\\/]/,
             name: 'jlab_core'
           }
         }
@@ -309,7 +309,7 @@ module.exports = [
       ]
     },
     devtool: 'inline-source-map',
-    externals: ['node-fetch', 'ws'],
+    externals: ['ws'],
     plugins
   })
 ].concat(extensionAssetConfig);

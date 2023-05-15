@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
 
@@ -44,7 +43,7 @@ class LogErrorHandler(logging.Handler):
         super().__init__(level=logging.ERROR)
         self.errored = False
 
-    def filter(self, record):
+    def filter(self, record):  # noqa
         # Handle known StreamClosedError from Tornado
         # These occur when we forcibly close Websockets or
         # browser connections during the test.
@@ -145,8 +144,8 @@ async def run_browser(url):
     if not osp.exists(osp.join(target, "node_modules")):
         if not osp.exists(target):
             os.makedirs(osp.join(target))
-        await run_async_process(["jlpm", "init", "-y"], cwd=target)
-        await run_async_process(["jlpm", "add", "playwright@^1.9.2"], cwd=target)
+        await run_async_process(["npm", "init", "-y"], cwd=target)
+        await run_async_process(["npm", "install", "playwright@^1.9.2"], cwd=target)
     shutil.copy(osp.join(here, "browser-test.js"), osp.join(target, "browser-test.js"))
     await run_async_process(["node", "browser-test.js", url], cwd=target)
 
@@ -156,10 +155,10 @@ def run_browser_sync(url):
     target = osp.join(get_app_dir(), "browser_test")
     if not osp.exists(osp.join(target, "node_modules")):
         os.makedirs(target)
-        subprocess.call(["jlpm", "init", "-y"], cwd=target)
-        subprocess.call(["jlpm", "add", "playwright@^1.9.2"], cwd=target)
+        subprocess.call(["npm", "init", "-y"], cwd=target)  # noqa S603 S607
+        subprocess.call(["npm", "install", "playwright@^1.9.2"], cwd=target)  # noqa S603 S607
     shutil.copy(osp.join(here, "browser-test.js"), osp.join(target, "browser-test.js"))
-    return subprocess.check_call(["node", "browser-test.js", url], cwd=target)
+    return subprocess.check_call(["node", "browser-test.js", url], cwd=target)  # noqa S603 S607
 
 
 class BrowserApp(LabApp):
@@ -178,7 +177,7 @@ class BrowserApp(LabApp):
     test_browser = Bool(True)
 
     def initialize_settings(self):
-        self.settings.setdefault("page_config_data", dict())
+        self.settings.setdefault("page_config_data", {})
         self.settings["page_config_data"]["browserTest"] = True
         self.settings["page_config_data"]["buildAvailable"] = False
         self.settings["page_config_data"]["exposeAppInBrowser"] = True

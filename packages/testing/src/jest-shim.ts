@@ -11,7 +11,7 @@ globalThis.DragEvent = class DragEvent {} as any;
 
 if (
   typeof globalThis.TextDecoder === 'undefined' ||
-  typeof globalThis.TextDecoder === 'undefined'
+  typeof globalThis.TextEncoder === 'undefined'
 ) {
   const util = require('util');
   globalThis.TextDecoder = util.TextDecoder;
@@ -114,3 +114,24 @@ process.on('unhandledRejection', (error, promise) => {
   }
   promise.catch(err => console.error('promise rejected', err));
 });
+
+if ((window as any).requestIdleCallback === undefined) {
+  // On Safari, requestIdleCallback is not available, so we use replacement functions for `idleCallbacks`
+  // See: https://developer.mozilla.org/en-US/docs/Web/API/Background_Tasks_API#falling_back_to_settimeout
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  (window as any).requestIdleCallback = function (handler: Function) {
+    let startTime = Date.now();
+    return setTimeout(function () {
+      handler({
+        didTimeout: false,
+        timeRemaining: function () {
+          return Math.max(0, 50.0 - (Date.now() - startTime));
+        }
+      });
+    }, 1);
+  };
+
+  (window as any).cancelIdleCallback = function (id: number) {
+    clearTimeout(id);
+  };
+}

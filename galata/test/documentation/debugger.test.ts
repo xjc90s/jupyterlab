@@ -22,9 +22,12 @@ test.describe('Debugger', () => {
     await createNotebook(page);
 
     // Wait for kernel to settle on idle
-    await page.waitForSelector('#jp-main-statusbar >> text=Idle');
-    await page.waitForSelector('#jp-main-statusbar >> text=Busy');
-    await page.waitForSelector('#jp-main-statusbar >> text=Idle');
+    await page
+      .locator('.jp-DebuggerBugButton[aria-disabled="false"]')
+      .waitFor();
+    await page
+      .locator('.jp-Notebook-ExecutionIndicator[data-status="idle"]')
+      .waitFor();
 
     expect(
       await page.screenshot({
@@ -76,7 +79,6 @@ test.describe('Debugger', () => {
     const runButton = await page.waitForSelector(
       '.jp-Toolbar-item >> [data-command="runmenu:run"]'
     );
-    await runButton.hover();
 
     // Inject mouse pointer
     await page.evaluate(
@@ -85,6 +87,8 @@ test.describe('Debugger', () => {
       },
       [await positionMouseOver(runButton)]
     );
+    await runButton.focus();
+    await runButton.hover();
 
     expect(
       await page.screenshot({ clip: { y: 62, x: 400, width: 190, height: 60 } })
@@ -114,6 +118,74 @@ test.describe('Debugger', () => {
       })
     ).toMatchSnapshot('debugger_stop_on_breakpoint.png');
 
+    await page.click('button[title^=Continue]');
+  });
+
+  test('Breakpoints on exception', async ({ page, tmpPath }) => {
+    await page.goto(`tree/${tmpPath}`);
+
+    await createNotebook(page);
+
+    await page.debugger.switchOn();
+    await page.waitForCondition(() => page.debugger.isOpen());
+    await setSidebarWidth(page, 251, 'right');
+
+    await expect(page.locator('button.jp-PauseOnExceptions')).not.toHaveClass(
+      /lm-mod-toggled/
+    );
+    await page.locator('button.jp-PauseOnExceptions').click();
+    const menu = page.locator('.jp-PauseOnExceptions-menu');
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('li.lm-Menu-item')).toHaveCount(3);
+    await expect(menu.locator('li.lm-Menu-item.lm-mod-toggled')).toHaveCount(0);
+
+    await menu
+      .locator('li div.lm-Menu-itemLabel:text("userUnhandled")')
+      .click();
+
+    await expect(page.locator('button.jp-PauseOnExceptions')).toHaveClass(
+      /lm-mod-toggled/
+    );
+
+    await page.notebook.enterCellEditingMode(0);
+    const keyboard = page.keyboard;
+    await keyboard.press('Control+A');
+    await keyboard.type('try:\n1/0\n', { delay: 100 });
+    await keyboard.press('Backspace');
+    await keyboard.type('except:\n2/0\n', { delay: 100 });
+
+    void page.notebook.runCell(0);
+
+    // Wait to be stopped on the breakpoint
+    await page.debugger.waitForCallStack();
+    expect(
+      await page.screenshot({
+        clip: { y: 110, x: 300, width: 300, height: 80 }
+      })
+    ).toMatchSnapshot('debugger_stop_on_unhandled_exception.png');
+
+    await page.click('button[title^=Continue]');
+    await page.notebook.waitForRun(0);
+
+    await page.locator('button.jp-PauseOnExceptions').click();
+
+    await expect(menu.locator('li.lm-Menu-item.lm-mod-toggled')).toHaveCount(1);
+    await expect(
+      menu.locator('li:has(div.lm-Menu-itemLabel:text("userUnhandled"))')
+    ).toHaveClass(/lm-mod-toggled/);
+
+    await menu.locator('li div.lm-Menu-itemLabel:text("raised")').click();
+
+    void page.notebook.runCell(0);
+
+    // Wait to be stopped on the breakpoint
+    await page.debugger.waitForCallStack();
+    expect(
+      await page.screenshot({
+        clip: { y: 110, x: 300, width: 300, height: 80 }
+      })
+    ).toMatchSnapshot('debugger_stop_on_raised_exception.png');
+    await page.click('button[title^=Continue]');
     await page.click('button[title^=Continue]');
   });
 
@@ -157,16 +229,17 @@ test.describe('Debugger', () => {
     // Don't wait as it will be blocked
     void page.notebook.runCell(1);
 
-    // Wait to be stopped on the breakpoint
+    // Wait to be stopped on the breakpoint and the local variables to be displayed
     await page.debugger.waitForCallStack();
+    await expect(page.locator('select[aria-label="Scope"]')).toHaveValue(
+      'Locals'
+    );
 
     expect(
       await page.screenshot({
         clip: { y: 58, x: 998, width: 280, height: 138 }
       })
     ).toMatchSnapshot('debugger_variables.png');
-
-    await page.click('button[title^=Continue]');
   });
 
   test('Call Stack panel', async ({ page, tmpPath }) => {
@@ -218,9 +291,7 @@ test.describe('Debugger', () => {
     await page.debugger.waitForCallStack();
 
     const breakpointsPanel = await page.debugger.getBreakPointsPanel();
-    expect(await breakpointsPanel.innerText()).toMatch(
-      /ipykernel.*\/2114632017.py/
-    );
+    expect(await breakpointsPanel.innerText()).toMatch(/ipykernel.*\/\d+.py/);
 
     // Don't compare screenshot as the kernel id varies
     // Need to set precisely the path

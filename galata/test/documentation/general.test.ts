@@ -41,11 +41,11 @@ test.describe('General', () => {
     await page.dblclick('text=Lorenz.ipynb');
 
     await page.click('text=File');
-    await page.click('ul[role="menu"] >> text=New');
+    await page.click('.lm-Menu ul[role="menu"] >> text=New');
     await page.click('#jp-mainmenu-file-new >> text=Terminal');
 
     await page.click('text=File');
-    await page.click('ul[role="menu"] >> text=New');
+    await page.click('.lm-Menu ul[role="menu"] >> text=New');
     await page.click('#jp-mainmenu-file-new >> text=Console');
     await page.click('button:has-text("Select")');
 
@@ -129,11 +129,104 @@ test.describe('General', () => {
 
     await page.click('.jp-PropertyInspector >> text=Common Tools');
 
+    await expect(
+      page.locator('.jp-ActiveCellTool .jp-InputPrompt')
+    ).not.toBeEmpty();
+    await expect(
+      page.locator('.jp-ActiveCellTool .jp-InputPrompt')
+    ).not.toHaveClass(/lm-mod-hidden/);
+
     expect(
       await page.screenshot({
         clip: { y: 32, x: 997, width: 283, height: 400 }
       })
     ).toMatchSnapshot('interface_right_common.png');
+
+    // Expect the 'Raw NbConvert Format' field to be displayed only on raw cells
+    await expect(
+      page.locator(
+        '.jp-NotebookTools-tool .jp-FormGroup-fieldLabel:text("Raw NBConvert Format")'
+      )
+    ).toHaveCount(0);
+    await page.notebook.addCell('raw', 'Raw cell');
+    await expect(
+      page.locator(
+        '.jp-NotebookTools-tool .jp-FormGroup-fieldLabel:text("Raw NBConvert Format")'
+      )
+    ).toHaveCount(1);
+
+    // Open Advanced tools and get metadata content
+    await page.click('.jp-PropertyInspector >> text=Advanced Tools');
+    await expect(
+      page.locator('.jp-MetadataForm .jp-MetadataEditorTool')
+    ).toHaveCount(2);
+    const cellMetadata = await page
+      .locator('.jp-MetadataForm .jp-MetadataEditorTool')
+      .first()
+      .textContent();
+    const notebookMetadata = await page
+      .locator('.jp-MetadataForm .jp-MetadataEditorTool')
+      .last()
+      .textContent();
+    expect(cellMetadata).toContain('"tags": []');
+    expect(notebookMetadata).not.toContain('"base_numbering"');
+
+    // Expect adding tag is reflected in CellMetadataEditor
+    await page.click('.jp-CellTags .jp-CellTags-Add');
+    await page.keyboard.type('test-tag');
+    await page.keyboard.press('Enter');
+    await expect(
+      page.locator('.jp-CellTags .jp-CellTags-Holder span').first()
+    ).toHaveText('test-tag');
+
+    const newCellMetadata = (
+      await page
+        .locator('.jp-MetadataForm .jp-MetadataEditorTool')
+        .first()
+        .textContent()
+    )?.replace(/\s/g, '');
+    expect(newCellMetadata).toContain('"tags":["test-tag"]');
+
+    // Expect modifying 'toc base number' value is reflected in NotebookMetadataEditor
+    await page
+      .locator('.jp-MetadataForm input[label="Table of content - Base number"]')
+      .fill('3');
+    const newNotebookMetadata = (
+      await page
+        .locator('.jp-MetadataForm .jp-MetadataEditorTool')
+        .last()
+        .textContent()
+    )?.replace(/\s/g, '');
+    expect(newNotebookMetadata).toContain('"base_numbering":3');
+
+    // Test the active cell widget
+    await expect(
+      page.locator('.jp-ActiveCellTool .jp-ActiveCellTool-Content pre')
+    ).toHaveText('Raw cell');
+    await expect(
+      page.locator('.jp-ActiveCellTool .jp-InputPrompt')
+    ).toHaveClass(/lm-mod-hidden/);
+    await (await page.notebook.getCellInput(1))?.click();
+    await page.keyboard.type(' content');
+    await expect(
+      page.locator('.jp-ActiveCellTool .jp-ActiveCellTool-Content pre')
+    ).toHaveText('Raw cell content');
+
+    await page.notebook.addCell('code', 'print("test")');
+    await expect(
+      page.locator('.jp-ActiveCellTool .jp-ActiveCellTool-Content pre')
+    ).toHaveText('print("test")');
+    await expect(
+      page.locator('.jp-ActiveCellTool .jp-InputPrompt')
+    ).not.toHaveClass(/lm-mod-hidden/);
+    await expect(page.locator('.jp-ActiveCellTool .jp-InputPrompt')).toHaveText(
+      '[ ]:'
+    );
+
+    await page.notebook.runCell(2, true);
+    await expect(page.locator('.jp-ActiveCellTool .jp-InputPrompt')).toHaveText(
+      '[1]:'
+    );
   });
 
   test('Open tabs', async ({ page }) => {
@@ -141,6 +234,11 @@ test.describe('General', () => {
 
     await page.click('[title="Running Terminals and Kernels"]');
 
+    await page
+      .locator(
+        '.jp-RunningSessions-item.jp-mod-kernel >> text="Python 3 (ipykernel)"'
+      )
+      .waitFor();
     expect(
       await page.screenshot({ clip: { y: 27, x: 0, width: 283, height: 400 } })
     ).toMatchSnapshot('interface_tabs.png');
@@ -195,7 +293,7 @@ test.describe('General', () => {
     await page.click('text=File');
     await page.mouse.move(70, 40);
     const fileMenuNewItem = await page.waitForSelector(
-      'ul[role="menu"] >> text=New'
+      '.lm-Menu ul[role="menu"] >> text=New'
     );
     await fileMenuNewItem.click();
 
@@ -264,8 +362,8 @@ test.describe('General', () => {
 
     await page.click('text=File');
     await page.mouse.move(70, 40);
-    await page.click('ul[role="menu"] >> text=New');
-    await page.hover('ul[role="menu"] >> text=Text File');
+    await page.click('.lm-Menu ul[role="menu"] >> text=New');
+    await page.hover('.lm-Menu ul[role="menu"] >> text=Text File');
 
     // Inject mouse
     await page.evaluate(
@@ -317,7 +415,9 @@ test.describe('General', () => {
     await page.dblclick('text=jupyterlab.md');
 
     await page.click('text=Settings');
-    await page.click('ul[role="menu"] >> text=Text Editor Key Map');
+    await page.click(
+      '.lm-Menu ul[role="menu"] >> text=Text Editor Indentation'
+    );
 
     expect(
       await page.screenshot({ clip: { y: 0, x: 260, width: 600, height: 450 } })
@@ -340,7 +440,7 @@ test.describe('General', () => {
       '[aria-label="File Browser Section"] >> text=notebooks'
     );
     await page.dblclick('text=Data.ipynb');
-
+    await page.menu.clickMenuItem('Edit>Clear Outputs of All Cells');
     await page.notebook.setCell(
       1,
       'code',
@@ -360,8 +460,39 @@ test.describe('General', () => {
 
     // Relax threshold as displayed map may change a bit (in particular text positioning)
     expect(await page.screenshot()).toMatchSnapshot('notebook_ui.png', {
-      threshold: 0.3
+      maxDiffPixelRatio: 0.02
     });
+  });
+
+  test('Trust indicator', async ({ page }) => {
+    await page.goto();
+    // Open Data.ipynb which is not trusted by default
+    await page.dblclick(
+      '[aria-label="File Browser Section"] >> text=notebooks'
+    );
+    await page.dblclick('text=Data.ipynb');
+
+    const trustIndictor = page.locator('.jp-StatusItem-trust');
+
+    expect(await trustIndictor.screenshot()).toMatchSnapshot(
+      'notebook_not_trusted.png'
+    );
+
+    // Open trust dialog
+    // Note: we do not `await` here as it only resolves once dialog is closed
+    const trustPromise = page.evaluate(() => {
+      return window.jupyterapp.commands.execute('notebook:trust');
+    });
+    const dialogSelector = '.jp-Dialog-content';
+    await page.waitForSelector(dialogSelector);
+    // Accept option to trust the notebook
+    await page.click('.jp-Dialog-button.jp-mod-accept');
+    // Wait until dialog is gone
+    await trustPromise;
+
+    expect(await trustIndictor.screenshot()).toMatchSnapshot(
+      'notebook_trusted.png'
+    );
   });
 
   test('Heading anchor', async ({ page }, testInfo) => {
@@ -421,10 +552,11 @@ test.describe('General', () => {
 
     // Open a terminal
     await page.click('text=File');
-    await page.click('ul[role="menu"] >> text=New');
+    await page.click('.lm-Menu ul[role="menu"] >> text=New');
     await page.click('#jp-mainmenu-file-new >> text=Terminal');
 
-    await page.waitForSelector('.jp-Terminal');
+    // Wait for the xterm.js element to be added in the DOM
+    await page.waitForSelector('.jp-Terminal-body');
 
     await page.keyboard.type('cd $JUPYTERLAB_GALATA_ROOT_DIR');
     await page.keyboard.press('Enter');
@@ -449,7 +581,7 @@ test.describe('General', () => {
 
     // Open a terminal
     await page.click('text=File');
-    await page.click('ul[role="menu"] >> text=New');
+    await page.click('.lm-Menu ul[role="menu"] >> text=New');
     await page.click('#jp-mainmenu-file-new >> text=Terminal');
 
     await page.dblclick(
@@ -459,6 +591,12 @@ test.describe('General', () => {
     await page.dblclick('text=Julia.ipynb');
 
     await page.click('[title="Running Terminals and Kernels"]');
+
+    await expect(
+      page.locator(
+        '.jp-RunningSessions-item.jp-mod-kernel >> text="Python 3 (ipykernel)"'
+      )
+    ).toHaveCount(2);
 
     expect(
       await page.screenshot({ clip: { y: 27, x: 0, width: 283, height: 400 } })
@@ -473,6 +611,18 @@ test.describe('General', () => {
     expect(
       await (await page.$('#modal-command-palette')).screenshot()
     ).toMatchSnapshot('command_palette.png');
+  });
+
+  test('Keyboard Shortcuts Help', async ({ page, tmpPath }) => {
+    await page.goto(`tree/${tmpPath}`);
+
+    await page.notebook.createNew();
+
+    await page.keyboard.press('Control+Shift+H');
+
+    expect(await page.locator('.jp-Notebook').screenshot()).toMatchSnapshot(
+      'shortcuts_help.png'
+    );
   });
 
   test('Open With', async ({ page }) => {
@@ -517,7 +667,9 @@ test.describe('General', () => {
     await page.notebook.run();
 
     await page.click('text=File');
-    await page.click('ul[role="menu"] >> text=New Console for Notebook');
+    await page.click(
+      '.lm-Menu ul[role="menu"] >> text=New Console for Notebook'
+    );
 
     await page.click('.jp-CodeConsole-input >> .cm-content');
     await page.keyboard.type(
@@ -557,36 +709,6 @@ test.describe('General', () => {
     expect(await page.screenshot()).toMatchSnapshot('file_formats_altair.png', {
       threshold: 0.3
     });
-  });
-
-  test('VDOM', async ({ page, tmpPath }) => {
-    await page.goto(`tree/${tmpPath}`);
-    await page.addStyleTag({
-      content: `.jp-LabShell.jp-mod-devMode {
-        border-top: none;
-      }`
-    });
-
-    // Hide file browser
-    await page.click('[title^="File Browser"]');
-
-    await page.notebook.createNew();
-    await page.notebook.setCell(
-      0,
-      'code',
-      "from IPython.display import display\nfrom vdom.helpers import h1, p, img, div, b\n\ndisplay(\ndiv(\nh1('Our Incredibly Declarative Example'),\np('Can you believe we wrote this ', b('in Python'), '?'),\nimg(src='https://turnoff.us/image/en/death-and-the-programmer.png', style={'height': '268px'}),\np('What will ', b('you'), ' create next?')))"
-    );
-
-    await Promise.all([
-      page.waitForResponse(
-        'https://turnoff.us/image/en/death-and-the-programmer.png'
-      ),
-      page.notebook.run()
-    ]);
-
-    expect(await page.screenshot()).toMatchSnapshot(
-      'file_formats_nteract_vdom.png'
-    );
   });
 });
 

@@ -34,9 +34,14 @@ export interface IDebugger {
   readonly isStarted: boolean;
 
   /**
-   * Whether the session is pausing for exceptions.
+   * Get debugger config.
    */
-  readonly isPausingOnExceptions: boolean;
+  readonly config: IDebugger.IConfig;
+
+  /**
+   * A signal emitted when the pause on exception filter changes.
+   */
+  readonly pauseOnExceptionChanged: Signal<IDebugger, void>;
 
   /**
    * The debugger service's model.
@@ -64,9 +69,16 @@ export interface IDebugger {
   pauseOnExceptionsIsValid(): boolean;
 
   /**
-   * Handles enabling and disabling of Pause on Exception
+   * Add a filter to pauseOnExceptionsFilter.
+   *
+   * @param exceptionFilter - filter name.
    */
-  pauseOnExceptions(enable: boolean): Promise<void>;
+  pauseOnExceptionsFilter(exceptionFilter: string): Promise<void>;
+
+  /**
+   * Send the pauseOnExceptions' filters to the debugger.
+   */
+  pauseOnExceptions(exceptionFilter: string[]): Promise<void>;
 
   /**
    * Continues the execution of the current thread.
@@ -105,6 +117,14 @@ export interface IDebugger {
   inspectVariable(
     variablesReference: number
   ): Promise<DebugProtocol.Variable[]>;
+
+  /**
+   * Request to set a variable in the global scope.
+   *
+   * @param name The name of the variable.
+   * @param value The value of the variable.
+   */
+  copyToGlobals(name: string): Promise<void>;
 
   /**
    * Request rich representation of a variable.
@@ -334,19 +354,14 @@ export namespace IDebugger {
     connection: Session.ISessionConnection | null;
 
     /**
-     * Returns the initialize response .
+     * Returns the initialize response.
      */
     readonly capabilities: DebugProtocol.Capabilities | undefined;
 
     /**
-     * Whether the debug session is started
+     * Whether the debug session is started.
      */
     readonly isStarted: boolean;
-
-    /**
-     * Whether the debug session is pausing on exceptions.
-     */
-    pausingOnExceptions: string[];
 
     /**
      * Whether the debug session is pausing on exceptions.
@@ -367,6 +382,18 @@ export namespace IDebugger {
       IDebugger.ISession,
       IDebugger.ISession.Event
     >;
+
+    /**
+     * Get current exception filter.
+     */
+    currentExceptionFilters: string[];
+
+    /**
+     * Whether the debugger is pausing on exception.
+     *
+     * @param filter - Specify a filter
+     */
+    isPausingOnException(filter?: string): boolean;
 
     /**
      * Restore the state of a debug session.
@@ -502,6 +529,7 @@ export namespace IDebugger {
       completions: DebugProtocol.CompletionsArguments;
       configurationDone: DebugProtocol.ConfigurationDoneArguments;
       continue: DebugProtocol.ContinueArguments;
+      copyToGlobals: ICopyToGlobalsArguments;
       debugInfo: Record<string, never>;
       disconnect: DebugProtocol.DisconnectArguments;
       dumpCell: IDumpCellArguments;
@@ -546,6 +574,7 @@ export namespace IDebugger {
       completions: DebugProtocol.CompletionsResponse;
       configurationDone: DebugProtocol.ConfigurationDoneResponse;
       continue: DebugProtocol.ContinueResponse;
+      copyToGlobals: DebugProtocol.SetExpressionResponse;
       debugInfo: IDebugInfoResponse;
       disconnect: DebugProtocol.DisconnectResponse;
       dumpCell: IDumpCellResponse;
@@ -583,6 +612,17 @@ export namespace IDebugger {
     };
 
     /**
+     * Arguments for CopyToGlobals request.
+     * This is an addition to the Debug Adaptor protocol to support
+     * copying variable from Locals() to Globals() during breakpoint.
+     */
+    export interface ICopyToGlobalsArguments {
+      srcVariableName: string;
+      dstVariableName: string;
+      srcFrameId: number;
+    }
+
+    /**
      * List of breakpoints in a source file.
      */
     export interface IDebugInfoBreakpoints {
@@ -598,6 +638,10 @@ export namespace IDebugger {
     export interface IDebugInfoResponse extends DebugProtocol.Response {
       body: {
         breakpoints: IDebugInfoBreakpoints[];
+        /**
+         * Whether the kernel supports the 'copyToGlobals' request.
+         */
+        copyToGlobals?: boolean;
         hashMethod: string;
         hashSeed: number;
         isStarted: boolean;
@@ -676,6 +720,13 @@ export namespace IDebugger {
      */
     export interface IInfoReply extends KernelMessage.IInfoReply {
       debugger: boolean;
+    }
+
+    /**
+     * An interface for current exception filters.
+     */
+    export interface IExceptionFilter {
+      [kernels: string]: string[];
     }
   }
 
@@ -862,6 +913,11 @@ export namespace IDebugger {
       hasRichVariableRendering: boolean;
 
       /**
+       * Whether the kernel supports the copyToGlobals request.
+       */
+      supportCopyToGlobals: boolean;
+
+      /**
        * The variables UI model.
        */
       readonly variables: IVariables;
@@ -1014,32 +1070,39 @@ export namespace IDebugger {
 /**
  * The visual debugger token.
  */
-export const IDebugger = new Token<IDebugger>('@jupyterlab/debugger:IDebugger');
+export const IDebugger = new Token<IDebugger>(
+  '@jupyterlab/debugger:IDebugger',
+  'A debugger user interface.'
+);
 
 /**
  * The debugger configuration token.
  */
 export const IDebuggerConfig = new Token<IDebugger.IConfig>(
-  '@jupyterlab/debugger:IDebuggerConfig'
+  '@jupyterlab/debugger:IDebuggerConfig',
+  'A service to handle the debugger configuration.'
 );
 
 /**
  * The debugger sources utility token.
  */
 export const IDebuggerSources = new Token<IDebugger.ISources>(
-  '@jupyterlab/debugger:IDebuggerSources'
+  '@jupyterlab/debugger:IDebuggerSources',
+  'A service to display sources in debug mode.'
 );
 
 /**
- * The debugger configuration token.
+ * The debugger sidebar token.
  */
 export const IDebuggerSidebar = new Token<IDebugger.ISidebar>(
-  '@jupyterlab/debugger:IDebuggerSidebar'
+  '@jupyterlab/debugger:IDebuggerSidebar',
+  'A service for the debugger sidebar.'
 );
 
 /**
  * The debugger handler token.
  */
 export const IDebuggerHandler = new Token<IDebugger.IHandler>(
-  '@jupyterlab/debugger:IDebuggerHandler'
+  '@jupyterlab/debugger:IDebuggerHandler',
+  'A service for handling notebook debugger.'
 );

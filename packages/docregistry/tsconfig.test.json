@@ -9,13 +9,7 @@
       "path": "../codeeditor"
     },
     {
-      "path": "../codemirror"
-    },
-    {
       "path": "../coreutils"
-    },
-    {
-      "path": "../docprovider"
     },
     {
       "path": "../observables"

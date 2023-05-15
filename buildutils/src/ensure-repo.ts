@@ -45,7 +45,7 @@ const MISSING: Dict<string[]> = {
   '@jupyterlab/coreutils': ['path'],
   '@jupyterlab/buildutils': ['path', 'webpack'],
   '@jupyterlab/builder': ['path'],
-  '@jupyterlab/galata': ['fs', 'path'],
+  '@jupyterlab/galata': ['fs', 'path', '@jupyterlab/galata'],
   '@jupyterlab/testing': ['fs', 'path'],
   '@jupyterlab/vega5-extension': ['vega-embed']
 };
@@ -77,9 +77,10 @@ const UNUSED: Dict<string[]> = {
     'style-loader',
     'terser-webpack-plugin',
     'webpack-cli',
-    'worker-loader'
+    'worker-loader',
+    'source-map-loader'
   ],
-  '@jupyterlab/buildutils': ['verdaccio'],
+  '@jupyterlab/buildutils': ['inquirer', 'verdaccio'],
   '@jupyterlab/codemirror': [
     '@codemirror/lang-cpp',
     '@codemirror/lang-css',
@@ -93,13 +94,16 @@ const UNUSED: Dict<string[]> = {
     '@codemirror/lang-rust',
     '@codemirror/lang-sql',
     '@codemirror/lang-wast',
-    '@codemirror/lang-xml'
+    '@codemirror/lang-xml',
+    '@codemirror/legacy-modes'
+  ],
+  '@jupyterlab/codemirror-extension': [
+    '@codemirror/lang-markdown',
+    '@codemirror/legacy-modes'
   ],
   '@jupyterlab/coreutils': ['path-browserify'],
   '@jupyterlab/fileeditor': ['regexp-match-indices'],
-  '@jupyterlab/galata': ['node-fetch', 'http-server'],
-  '@jupyterlab/services': ['node-fetch', 'ws'],
-  '@jupyterlab/rendermime': ['@jupyterlab/mathjax2'],
+  '@jupyterlab/services': ['ws'],
   '@jupyterlab/testing': [
     '@babel/core',
     '@babel/preset-env',
@@ -155,6 +159,21 @@ const SKIP_CSS: Dict<string[]> = {
   ],
   '@jupyterlab/filebrowser': ['@jupyterlab/statusbar'],
   '@jupyterlab/fileeditor': ['@jupyterlab/statusbar'],
+  '@jupyterlab/galata': [
+    '@jupyterlab/application',
+    '@jupyterlab/apputils',
+    '@jupyterlab/debugger',
+    '@jupyterlab/docmanager',
+    '@jupyterlab/notebook'
+  ],
+  '@jupyterlab/galata-extension': [
+    '@jupyterlab/application',
+    '@jupyterlab/apputils',
+    '@jupyterlab/cells',
+    '@jupyterlab/debugger',
+    '@jupyterlab/docmanager',
+    '@jupyterlab/notebook'
+  ],
   '@jupyterlab/help-extension': ['@jupyterlab/application'],
   '@jupyterlab/lsp': ['codemirror'],
   '@jupyterlab/metapackage': [
@@ -179,7 +198,6 @@ const SKIP_CSS: Dict<string[]> = {
     '@jupyterlab/notebook',
     '@jupyterlab/cell-toolbar',
     '@jupyterlab/cell-toolbar-extension',
-    '@jupyterlab/celltags',
     '@jupyterlab/celltags-extension',
     '@jupyterlab/fileeditor',
     '@jupyterlab/codemirror-extension',
@@ -190,12 +208,10 @@ const SKIP_CSS: Dict<string[]> = {
     '@jupyterlab/console-extension',
     '@jupyterlab/csvviewer',
     '@jupyterlab/documentsearch',
-    '@jupyterlab/docprovider',
     '@jupyterlab/csvviewer-extension',
     '@jupyterlab/debugger',
     '@jupyterlab/debugger-extension',
     '@jupyterlab/docmanager-extension',
-    '@jupyterlab/docprovider-extension',
     '@jupyterlab/documentsearch-extension',
     '@jupyterlab/extensionmanager',
     '@jupyterlab/extensionmanager-extension',
@@ -220,8 +236,7 @@ const SKIP_CSS: Dict<string[]> = {
     '@jupyterlab/markdownviewer',
     '@jupyterlab/markdownviewer-extension',
     '@jupyterlab/markedparser-extension',
-    '@jupyterlab/mathjax2',
-    '@jupyterlab/mathjax2-extension',
+    '@jupyterlab/mathjax-extension',
     '@jupyterlab/metadataform',
     '@jupyterlab/metadataform-extension',
     '@jupyterlab/nbconvert-css',
@@ -244,10 +259,6 @@ const SKIP_CSS: Dict<string[]> = {
     '@jupyterlab/tooltip-extension',
     '@jupyterlab/translation-extension',
     '@jupyterlab/ui-components-extension',
-    '@jupyterlab/collaboration',
-    '@jupyterlab/collaboration-extension',
-    '@jupyterlab/vdom',
-    '@jupyterlab/vdom-extension',
     '@jupyterlab/vega5-extension'
   ],
   '@jupyterlab/notebook': ['@jupyterlab/application'],
@@ -307,7 +318,10 @@ function ensureBranch(): string[] {
     .trim()
     .split(/\r?\n/);
   files = files.filter(filePath => {
-    return fileTypes.indexOf(path.extname(filePath)) !== -1;
+    return (
+      fileTypes.indexOf(path.extname(filePath)) !== -1 &&
+      !filePath.endsWith('_static/switcher.json')
+    );
   });
 
   // Set up string replacements
@@ -657,37 +671,6 @@ function ensureBuildUtils() {
 }
 
 /**
- * Ensure lockfile structure
- */
-function ensureLockfile(): string[] {
-  const staging = './jupyterlab/staging';
-  const lockFile = path.join(staging, 'yarn.lock');
-  const content = fs.readFileSync(lockFile, { encoding: 'utf-8' });
-  let newContent = content;
-  const messages = [];
-
-  // Verify that all packages have resolved to the correct (default) registry
-  const resolvedPattern =
-    /^\s*resolved "((?!https:\/\/registry\.yarnpkg\.com\/).*)"\s*$/gm;
-  let badRegistry;
-  while ((badRegistry = resolvedPattern.exec(content)) !== null) {
-    messages.push(`Fixing bad npm/yarn registry: ${badRegistry[1]}`);
-    const parsed = new URL(badRegistry[1]);
-    const newUrl = badRegistry[1].replace(
-      parsed.origin,
-      'https://registry.yarnpkg.com'
-    );
-    newContent = newContent.replace(badRegistry[1], newUrl);
-  }
-
-  if (content !== newContent) {
-    // Write the updated lockfile data back
-    fs.writeFileSync(lockFile, newContent, 'utf-8');
-  }
-  return messages;
-}
-
-/**
  * Ensure the repo integrity.
  */
 export async function ensureIntegrity(): Promise<boolean> {
@@ -834,12 +817,6 @@ export async function ensureIntegrity(): Promise<boolean> {
       messages[pkgName] = [];
     }
     messages[pkgName] = messages[pkgName].concat(pkgMessages);
-  }
-
-  // Ensure the staging area lockfile
-  const lockFileMessages = ensureLockfile();
-  if (lockFileMessages.length > 0) {
-    messages['lockfile'] = lockFileMessages;
   }
 
   // Handle the top level package.

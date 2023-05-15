@@ -3,7 +3,6 @@
 
 import { MainAreaWidget, setToolbar } from '@jupyterlab/apputils';
 import { CodeEditor } from '@jupyterlab/codeeditor';
-import { Mode } from '@jupyterlab/codemirror';
 import { IChangedArgs, PathExt } from '@jupyterlab/coreutils';
 import { IObservableList } from '@jupyterlab/observables';
 import { Contents } from '@jupyterlab/services';
@@ -24,11 +23,12 @@ export class DocumentModel
   /**
    * Construct a new document model.
    */
-  constructor(languagePreference?: string, collaborationEnabled?: boolean) {
-    super();
-    this._defaultLang = languagePreference || '';
+  constructor(options: DocumentRegistry.IModelOptions<ISharedFile> = {}) {
+    super({ sharedModel: options.sharedModel });
+    this._defaultLang = options.languagePreference ?? '';
+    this._collaborationEnabled = !!options.collaborationEnabled;
+
     this.sharedModel.changed.connect(this._onStateChanged, this);
-    this._collaborationEnabled = !!collaborationEnabled;
   }
 
   /**
@@ -260,26 +260,25 @@ export class TextModelFactory implements DocumentRegistry.CodeModelFactory {
   /**
    * Create a new model.
    *
-   * @param languagePreference - An optional kernel language preference.
-   * @param modelDB - An optional modelDB.
-   * @param isInitialized - An optional flag to check if the model is initialized.
+   * @param options - Model options.
    *
    * @returns A new document model.
    */
   createNew(
-    languagePreference?: string,
-    collaborationEnabled?: boolean
+    options: DocumentRegistry.IModelOptions<ISharedFile> = {}
   ): DocumentRegistry.ICodeModel {
-    const collaborative = collaborationEnabled && this.collaborative;
-    return new DocumentModel(languagePreference, collaborative);
+    const collaborative = options.collaborationEnabled && this.collaborative;
+    return new DocumentModel({
+      ...options,
+      collaborationEnabled: collaborative
+    });
   }
 
   /**
    * Get the preferred kernel language given a file path.
    */
   preferredLanguage(path: string): string {
-    const mode = Mode.findByFileName(path);
-    return mode?.name ?? '';
+    return '';
   }
 
   private _isDisposed = false;
@@ -343,6 +342,7 @@ export abstract class ABCWidgetFactory<
     this._preferKernel = !!options.preferKernel;
     this._canStartKernel = !!options.canStartKernel;
     this._shutdownOnClose = !!options.shutdownOnClose;
+    this._autoStartDefault = !!options.autoStartDefault;
     this._toolbarFactory = options.toolbarFactory;
   }
 
@@ -455,6 +455,16 @@ export abstract class ABCWidgetFactory<
   }
 
   /**
+   * Whether to automatically select the preferred kernel during a kernel start
+   */
+  get autoStartDefault(): boolean {
+    return this._autoStartDefault;
+  }
+  set autoStartDefault(value: boolean) {
+    this._autoStartDefault = value;
+  }
+
+  /**
    * Create a new widget given a document model and a context.
    *
    * #### Notes
@@ -502,6 +512,7 @@ export abstract class ABCWidgetFactory<
   private _translator: ITranslator;
   private _name: string;
   private _label: string;
+  private _autoStartDefault: boolean;
   private _readOnly: boolean;
   private _canStartKernel: boolean;
   private _shutdownOnClose: boolean;

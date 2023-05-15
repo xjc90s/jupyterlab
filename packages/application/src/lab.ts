@@ -1,7 +1,6 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-import { Notification, NotificationManager } from '@jupyterlab/apputils';
 import { PageConfig } from '@jupyterlab/coreutils';
 import { Base64ModelFactory } from '@jupyterlab/docregistry';
 import { IRenderMime } from '@jupyterlab/rendermime-interfaces';
@@ -129,19 +128,6 @@ export class JupyterLab extends JupyterFrontEnd<ILabShell> {
   }
 
   /**
-   * Get a handle on the notification manager.
-   *
-   * ### Notes
-   * You should use stable API `Notification.manager` from `@jupyterlab/apputils`.
-   *
-   * @deprecated This is an experimental feature used for integration testing.
-   * @private
-   */
-  get notificationManager(): NotificationManager {
-    return Notification.manager;
-  }
-
-  /**
    * The JupyterLab application paths dictionary.
    */
   get paths(): JupyterFrontEnd.IPaths {
@@ -202,7 +188,10 @@ export namespace JupyterLab {
   /**
    * The layout restorer token.
    */
-  export const IInfo = new Token<IInfo>('@jupyterlab/application:IInfo');
+  export const IInfo = new Token<IInfo>(
+    '@jupyterlab/application:IInfo',
+    'A service providing metadata about the current application, including disabled extensions and whether dev mode is enabled.'
+  );
 
   /**
    * The information about a JupyterLab application.

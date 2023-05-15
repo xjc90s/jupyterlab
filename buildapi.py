@@ -13,7 +13,6 @@ from packaging.version import Version
 
 
 def builder(target_name, version, *args, **kwargs):
-
     # Allow building from sdist without node.
     if target_name == "wheel" and not os.path.exists("dev_mode"):
         return
@@ -31,8 +30,9 @@ def builder(target_name, version, *args, **kwargs):
     with open(target) as fid:
         npm_version = json.load(fid)["jupyterlab"]["version"]
 
-    py_version = subprocess.check_output(["hatchling", "version"])
+    py_version = subprocess.check_output(["hatchling", "version"])  # noqa S603 S607
     py_version = py_version.decode("utf-8").strip()
 
     if Version(npm_version) != Version(py_version):
-        raise ValueError("Version mismatch, please run `npm run prepare:python-release`")
+        msg = "Version mismatch, please run `npm run prepare:python-release`"
+        raise ValueError(msg)

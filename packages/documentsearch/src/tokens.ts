@@ -11,7 +11,10 @@ import { Widget } from '@lumino/widgets';
  * The search provider registry token.
  */
 export const ISearchProviderRegistry = new Token<ISearchProviderRegistry>(
-  '@jupyterlab/documentsearch:ISearchProviderRegistry'
+  '@jupyterlab/documentsearch:ISearchProviderRegistry',
+  `A service for a registry of search
+  providers for the application. Plugins can register their UI elements with this registry
+  to provide find/replace support.`
 );
 
 /**
@@ -46,6 +49,32 @@ export interface IFilters {
    * Filter name: value
    */
   [key: string]: boolean;
+}
+
+/**
+ * Options adjusting replacement behavior.
+ */
+export interface IReplaceOptions {
+  /**
+   * Should the letter case be preserved?
+   */
+  preserveCase?: boolean;
+  /**
+   * Did user request regular expressions?
+   *
+   * This has impact on how `$` is interpreted in replacement text.
+   */
+  regularExpression?: boolean;
+}
+
+/**
+ * Support for options adjusting replacement behavior.
+ */
+export interface IReplaceOptionsSupport {
+  /**
+   * Support for preserving letter case.
+   */
+  preserveCase?: boolean;
 }
 
 /**
@@ -263,7 +292,11 @@ export interface IBaseSearchProvider extends IDisposable {
    *
    * @returns A promise that resolves with a boolean indicating whether a replace occurred.
    */
-  replaceCurrentMatch(newText: string, loop?: boolean): Promise<boolean>;
+  replaceCurrentMatch(
+    newText: string,
+    loop?: boolean,
+    options?: IReplaceOptions
+  ): Promise<boolean>;
 
   /**
    * Replace all matches in the widget with the provided text
@@ -272,7 +305,10 @@ export interface IBaseSearchProvider extends IDisposable {
    *
    * @returns A promise that resolves with a boolean indicating whether a replace occurred.
    */
-  replaceAllMatches(newText: string): Promise<boolean>;
+  replaceAllMatches(
+    newText: string,
+    options?: IReplaceOptions
+  ): Promise<boolean>;
 
   /**
    * Signal indicating that something in the search has changed, so the UI should update
@@ -304,10 +340,15 @@ export interface ISearchProvider extends IBaseSearchProvider {
 
   /**
    * Set to true if the widget under search is read-only, false
-   * if it is editable.  Will be used to determine whether to show
+   * if it is editable. Will be used to determine whether to show
    * the replace option.
    */
   readonly isReadOnly: boolean;
+
+  /**
+   * Specifies which replace options are supported by provider.
+   */
+  readonly replaceOptionsSupport?: IReplaceOptionsSupport;
 
   /**
    * Get the filters definition for the given provider.
@@ -328,4 +369,9 @@ export interface ISearchProvider extends IBaseSearchProvider {
    * @returns The valid filter value
    */
   validateFilter?(name: string, value: boolean): Promise<boolean>;
+
+  /**
+   * Signal emitted when filter definition changed.
+   */
+  filtersChanged?: ISignal<ISearchProvider, void>;
 }

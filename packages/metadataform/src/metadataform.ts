@@ -6,6 +6,7 @@
  */
 
 import { NotebookTools } from '@jupyterlab/notebook';
+import { BaseSettings } from '@jupyterlab/settingregistry';
 import {
   ITranslator,
   nullTranslator,
@@ -13,6 +14,8 @@ import {
 } from '@jupyterlab/translation';
 import {
   JSONExt,
+  JSONObject,
+  JSONValue,
   PartialJSONObject,
   PartialJSONValue,
   ReadonlyPartialJSONObject,
@@ -140,8 +143,12 @@ export class MetadataFormWidget
    * the whole root object must be updated.
    * This function build an object with all the root object to update
    * in metadata before performing update.
+   * It uses an arrow function to allow using 'this' properly when called from a custom field.
    */
-  updateMetadata(formData: ReadonlyPartialJSONObject, reload?: boolean) {
+  updateMetadata = (
+    formData: ReadonlyPartialJSONObject,
+    reload?: boolean
+  ): void => {
     if (this.notebookTools == undefined) return;
 
     const notebook = this.notebookTools.activeNotebookPanel;
@@ -284,7 +291,7 @@ export class MetadataFormWidget
     if (reload) {
       this._update();
     }
-  }
+  };
 
   /**
    * Set the content of the widget.
@@ -328,19 +335,16 @@ export class MetadataFormWidget
   /**
    * Handle a change to the active cell metadata.
    */
-  protected onActiveCellMetadataChanged(msg: Message): void {
+  protected onActiveCellMetadataChanged(_: Message): void {
     if (!this._updatingMetadata && this.isVisible) this._update();
   }
 
-  protected onActiveNotebookPanelChanged(msg: Message): void {
-    // Do not use notebook metadata if model is null.
-    let notebook = this.notebookTools.activeNotebookPanel;
-    if (notebook === null || notebook.model === null) {
-      console.warn('Notebook model is null, its metadata cannot be updated.');
-      this._notebookModelNull = true;
-    } else {
-      this._notebookModelNull = false;
-    }
+  /**
+   * Handle when the active notebook panel changes.
+   */
+  protected onActiveNotebookPanelChanged(_: Message): void {
+    const notebook = this.notebookTools.activeNotebookPanel;
+    this._notebookModelNull = notebook === null || notebook.model === null;
     if (!this._updatingMetadata && this.isVisible) this._update();
   }
 
@@ -364,15 +368,17 @@ export class MetadataFormWidget
       this._metadataSchema
     );
 
-    const formData = {} as PartialJSONObject;
+    const formData = {} as JSONObject;
 
-    for (let metadataKey of Object.keys(this._metadataSchema.properties)) {
+    for (let metadataKey of Object.keys(
+      this._metadataSchema.properties || JSONExt.emptyObject
+    )) {
       // Do not display the field if it's Notebook metadata and the notebook model is null.
       if (
         this._metaInformation[metadataKey]?.level === 'notebook' &&
         this._notebookModelNull
       ) {
-        delete formProperties.properties[metadataKey];
+        delete formProperties.properties![metadataKey];
         continue;
       }
 
@@ -383,7 +389,7 @@ export class MetadataFormWidget
           cell.model.type
         )
       ) {
-        delete formProperties.properties[metadataKey];
+        delete formProperties.properties![metadataKey];
         continue;
       }
 
@@ -407,7 +413,7 @@ export class MetadataFormWidget
       // Navigate to the value.
       for (let nested of nestedKeys) {
         if (nested in workingObject)
-          workingObject = workingObject[nested] as PartialJSONObject;
+          workingObject = workingObject[nested] as JSONObject;
         else {
           hasValue = false;
           break;
@@ -415,12 +421,14 @@ export class MetadataFormWidget
       }
 
       // Fill the formData with the current metadata value.
-      if (hasValue) formData[metadataKey] = workingObject as PartialJSONValue;
+      if (hasValue) formData[metadataKey] = workingObject as JSONValue;
     }
 
     this.buildWidget({
       properties: formProperties,
-      settings: new Private.Settings(this._metaInformation),
+      settings: new BaseSettings({
+        schema: this._metadataSchema as PartialJSONObject
+      }),
       uiSchema: this._uiSchema,
       translator: this.translator || null,
       formData: formData,
@@ -431,7 +439,7 @@ export class MetadataFormWidget
   }
 
   protected translator: ITranslator;
-  private _form: FormWidget | undefined = undefined;
+  private _form: FormWidget | undefined;
   private _metadataSchema: MetadataForm.IMetadataSchema;
   private _metaInformation: MetadataForm.IMetaInformation;
   private _uiSchema: MetadataForm.IUiSchema;
@@ -451,24 +459,6 @@ namespace Private {
     [metadata: string]: PartialJSONObject | PartialJSONValue | undefined;
   }
 
-  /**
-   * The settings to send to RJSF templates in formContext.
-   */
-  export class Settings implements MetadataForm.ISettings {
-    constructor(metaInformation: MetadataForm.IMetaInformation) {
-      this.metaInformation = metaInformation;
-    }
-
-    /**
-     * Returns the default value for a specific key.
-     * @param metadataKey - the key for which we expect default value.
-     */
-    default(metadataKey: string) {
-      return this.metaInformation[metadataKey]?.default;
-    }
-
-    metaInformation: MetadataForm.IMetaInformation;
-  }
   /**
    * Recursive function to clean the empty nested metadata before updating real metadata.
    * this function is called when a nested metadata is undefined (or default), so maybe some

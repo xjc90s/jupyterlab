@@ -46,7 +46,9 @@ import extensionSvgstr from '../../style/icons/sidebar/extension.svg';
 import fastForwardSvgstr from '../../style/icons/toolbar/fast-forward.svg';
 import fileSvgstr from '../../style/icons/filetype/file.svg';
 import fileUploadSvgstr from '../../style/icons/toolbar/file-upload.svg';
+import filterDotSvgstr from '../../style/icons/search/filter-dot.svg';
 import filterListSvgstr from '../../style/icons/toolbar/filter-list.svg';
+import filterSvgstr from '../../style/icons/search/filter.svg';
 import folderFavoriteSvgstr from '../../style/icons/filetype/folder-favorite.svg';
 import folderSvgstr from '../../style/icons/filetype/folder.svg';
 import homeSvgstr from '../../style/icons/filetype/home.svg';
@@ -103,6 +105,7 @@ import undoSvgstr from '../../style/icons/toolbar/undo.svg';
 import userSvgstr from '../../style/icons/sidebar/user.svg';
 import usersSvgstr from '../../style/icons/sidebar/users.svg';
 import vegaSvgstr from '../../style/icons/filetype/vega.svg';
+import wordSvgstr from '../../style/icons/search/word.svg';
 import yamlSvgstr from '../../style/icons/filetype/yaml.svg';
 
 // LabIcon instance construction
@@ -144,6 +147,8 @@ export const extensionIcon = new LabIcon({ name: 'ui-components:extension', svgs
 export const fastForwardIcon = new LabIcon({ name: 'ui-components:fast-forward', svgstr: fastForwardSvgstr });
 export const fileIcon = new LabIcon({ name: 'ui-components:file', svgstr: fileSvgstr });
 export const fileUploadIcon = new LabIcon({ name: 'ui-components:file-upload', svgstr: fileUploadSvgstr });
+export const filterDotIcon = new LabIcon({ name: 'ui-components:filter-dot', svgstr: filterDotSvgstr });
+export const filterIcon = new LabIcon({ name: 'ui-components:filter', svgstr: filterSvgstr });
 export const filterListIcon = new LabIcon({ name: 'ui-components:filter-list', svgstr: filterListSvgstr });
 export const folderFavoriteIcon = new LabIcon({ name: 'ui-components:folder-favorite', svgstr: folderFavoriteSvgstr });
 export const folderIcon = new LabIcon({ name: 'ui-components:folder', svgstr: folderSvgstr });
@@ -201,4 +206,5 @@ export const undoIcon = new LabIcon({ name: 'ui-components:undo', svgstr: undoSv
 export const userIcon = new LabIcon({ name: 'ui-components:user', svgstr: userSvgstr });
 export const usersIcon = new LabIcon({ name: 'ui-components:users', svgstr: usersSvgstr });
 export const vegaIcon = new LabIcon({ name: 'ui-components:vega', svgstr: vegaSvgstr });
+export const wordIcon = new LabIcon({ name: 'ui-components:word', svgstr: wordSvgstr });
 export const yamlIcon = new LabIcon({ name: 'ui-components:yaml', svgstr: yamlSvgstr });

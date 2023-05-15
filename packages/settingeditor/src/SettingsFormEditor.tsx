@@ -3,27 +3,24 @@
 | Distributed under the terms of the Modified BSD License.
 |----------------------------------------------------------------------------*/
 
+import React from 'react';
+
 import { showErrorMessage } from '@jupyterlab/apputils';
-import {
-  caretDownIcon,
-  caretRightIcon,
-  RJSFTemplatesFactory
-} from '@jupyterlab/ui-components';
 import { ISettingRegistry, Settings } from '@jupyterlab/settingregistry';
 import { ITranslator } from '@jupyterlab/translation';
-import { JSONExt, ReadonlyPartialJSONObject } from '@lumino/coreutils';
+import { FormComponent } from '@jupyterlab/ui-components';
+import {
+  JSONExt,
+  PartialJSONObject,
+  ReadonlyJSONObject,
+  ReadonlyPartialJSONObject
+} from '@lumino/coreutils';
 import { Debouncer } from '@lumino/polling';
-import Form, {
-  ArrayFieldTemplateProps,
-  Field,
-  FieldTemplateProps,
-  IChangeEvent,
-  ObjectFieldTemplateProps,
-  UiSchema
-} from '@rjsf/core';
+import { IChangeEvent } from '@rjsf/core';
+import validatorAjv8 from '@rjsf/validator-ajv8';
+import { Field, UiSchema } from '@rjsf/utils';
 import { JSONSchema7 } from 'json-schema';
-import React from 'react';
-import { PluginList } from './pluginlist';
+import { Button } from '@jupyterlab/ui-components';
 
 /**
  * Indentation to use when saving the settings as JSON document.
@@ -47,17 +44,7 @@ export namespace SettingsFormEditor {
     /**
      * Dictionary used for custom field renderers in the form.
      */
-    renderers: { [id: string]: Field };
-
-    /**
-     * Whether the form is collapsed or not.
-     */
-    isCollapsed: boolean;
-
-    /**
-     * Callback with the collapse state value.
-     */
-    onCollapseChange: (v: boolean) => void;
+    renderers: { [id: string]: { [property: string]: Field } };
 
     /**
      * Translator object
@@ -106,20 +93,6 @@ export namespace SettingsFormEditor {
      */
     filteredSchema?: ISettingRegistry.ISchema;
     /**
-     * Field template
-     */
-    fieldTemplate?: React.StatelessComponent<FieldTemplateProps<any>>;
-    /**
-     * Array Field template
-     */
-    arrayFieldTemplate?: React.StatelessComponent<ArrayFieldTemplateProps<any>>;
-    /**
-     * Object Field template
-     */
-    objectFieldTemplate?: React.StatelessComponent<
-      ObjectFieldTemplateProps<any>
-    >;
-    /**
      * Form context
      */
     formContext?: any;
@@ -137,19 +110,15 @@ export class SettingsFormEditor extends React.Component<
   constructor(props: SettingsFormEditor.IProps) {
     super(props);
     const { settings } = props;
-    this._formData = settings.composite;
-    this._templateFactory = new RJSFTemplatesFactory({
-      translator: this.props.translator,
-      showModifiedFromDefault: true
-    });
+    this._formData = settings.composite as ReadonlyJSONObject;
     this.state = {
       isModified: settings.isModified,
       uiSchema: {},
       filteredSchema: this.props.settings.schema,
-      fieldTemplate: this._templateFactory.fieldTemplate,
-      arrayFieldTemplate: this._templateFactory.arrayTemplate,
-      objectFieldTemplate: this._templateFactory.objectTemplate,
-      formContext: { settings: this.props.settings }
+      formContext: {
+        defaultFormData: this.props.settings.default(),
+        settings: this.props.settings
+      }
     };
     this.handleChange = this.handleChange.bind(this);
     this._debouncer = new Debouncer(this.handleChange);
@@ -161,19 +130,16 @@ export class SettingsFormEditor extends React.Component<
   }
 
   componentDidUpdate(prevProps: SettingsFormEditor.IProps): void {
-    this._setUiSchema(prevProps.renderers);
+    this._setUiSchema(prevProps.renderers[prevProps.settings.id]);
     this._setFilteredSchema(prevProps.filteredValues);
 
-    if (prevProps.translator !== this.props.translator) {
-      this.setState({
-        fieldTemplate: this._templateFactory.fieldTemplate,
-        arrayFieldTemplate: this._templateFactory.arrayTemplate,
-        objectFieldTemplate: this._templateFactory.objectTemplate
-      });
-    }
-
     if (prevProps.settings !== this.props.settings) {
-      this.setState({ formContext: { settings: this.props.settings } });
+      this.setState({
+        formContext: {
+          settings: this.props.settings,
+          defaultFormData: this.props.settings.default()
+        }
+      });
     }
   }
 
@@ -183,12 +149,12 @@ export class SettingsFormEditor extends React.Component<
 
   /**
    * Handler for edits made in the form editor.
-   * @param data - Form data sent from the form editor
    */
   handleChange(): void {
     // Prevent unnecessary save when opening settings that haven't been modified.
     if (
       !this.props.settings.isModified &&
+      this._formData &&
       this.props.settings.isDefault(this._formData)
     ) {
       this.props.updateDirtyState(false);
@@ -217,73 +183,52 @@ export class SettingsFormEditor extends React.Component<
     for (const field in this.props.settings.user) {
       await this.props.settings.remove(field);
     }
-    this._formData = this.props.settings.composite;
+    this._formData = this.props.settings.composite as ReadonlyJSONObject;
     this.setState({ isModified: false });
   };
 
   render(): JSX.Element {
     const trans = this.props.translator.load('jupyterlab');
-    const icon = this.props.isCollapsed ? caretRightIcon : caretDownIcon;
 
     return (
-      <div>
-        <div
-          className="jp-SettingsHeader"
-          onClick={() => {
-            this.props.onCollapseChange(!this.props.isCollapsed);
-            this.props.onSelect(this.props.settings.id);
-          }}
-        >
-          <header className="jp-SettingsTitle">
-            <icon.react
-              tag="span"
-              elementPosition="center"
-              className="jp-SettingsTitle-caret"
-            />
-            <h2>{this.props.settings.schema.title}</h2>
-            <div className="jp-SettingsHeader-description">
-              {this.props.settings.schema.description}
-            </div>
-          </header>
-          {this.state.isModified && (
-            <button className="jp-RestoreButton" onClick={this.reset}>
-              {trans.__('Restore to Defaults')}
-            </button>
-          )}
+      <>
+        <div className="jp-SettingsHeader">
+          <h2
+            className="jp-SettingsHeader-title"
+            title={this.props.settings.schema.description}
+          >
+            {this.props.settings.schema.title}
+          </h2>
+          <div className="jp-SettingsHeader-buttonbar">
+            {this.state.isModified && (
+              <Button className="jp-RestoreButton" onClick={this.reset}>
+                {trans.__('Restore to Defaults')}
+              </Button>
+            )}
+          </div>
+          <div className="jp-SettingsHeader-description">
+            {this.props.settings.schema.description}
+          </div>
         </div>
-        {!this.props.isCollapsed && (
-          <Form
-            schema={this.state.filteredSchema as JSONSchema7}
-            formData={this._formData}
-            FieldTemplate={this.state.fieldTemplate}
-            ArrayFieldTemplate={this.state.arrayFieldTemplate}
-            ObjectFieldTemplate={this.state.objectFieldTemplate}
-            uiSchema={this.state.uiSchema}
-            fields={this.props.renderers}
-            formContext={this.state.formContext}
-            liveValidate
-            idPrefix={`jp-SettingsEditor-${this.props.settings.id}`}
-            onChange={this._onChange}
-          />
-        )}
-      </div>
+        <FormComponent
+          validator={validatorAjv8}
+          schema={this.state.filteredSchema as JSONSchema7}
+          formData={this._getFilteredFormData(this.state.filteredSchema)}
+          uiSchema={this.state.uiSchema}
+          fields={this.props.renderers[this.props.settings.id]}
+          formContext={this.state.formContext}
+          liveValidate
+          idPrefix={`jp-SettingsEditor-${this.props.settings.id}`}
+          onChange={this._onChange}
+          translator={this.props.translator}
+        />
+      </>
     );
   }
 
-  /**
-   * Callback on plugin selection
-   * @param list Plugin list
-   * @param id Plugin id
-   */
-  protected onSelect = (list: PluginList, id: string): void => {
-    if (id === this.props.settings.id) {
-      this.props.onCollapseChange(false);
-    }
-  };
-
   private _onChange = (e: IChangeEvent<ReadonlyPartialJSONObject>): void => {
     this.props.hasError(e.errors.length !== 0);
-    this._formData = e.formData;
+    this._formData = e.formData as ReadonlyJSONObject;
     if (e.errors.length === 0) {
       this.props.updateDirtyState(true);
       void this._debouncer.invoke();
@@ -292,18 +237,18 @@ export class SettingsFormEditor extends React.Component<
   };
 
   private _setUiSchema(prevRenderers?: { [id: string]: Field }) {
+    const renderers = this.props.renderers[this.props.settings.id];
     if (
-      !prevRenderers ||
       !JSONExt.deepEqual(
-        Object.keys(prevRenderers).sort(),
-        Object.keys(this.props.renderers).sort()
+        Object.keys(prevRenderers ?? {}).sort(),
+        Object.keys(renderers ?? {}).sort()
       )
     ) {
       /**
        * Construct uiSchema to pass any custom renderers to the form editor.
        */
       const uiSchema: UiSchema = {};
-      for (const id in this.props.renderers) {
+      for (const id in this.props.renderers[this.props.settings.id]) {
         if (
           Object.keys(this.props.settings.schema.properties ?? {}).includes(id)
         ) {
@@ -341,7 +286,23 @@ export class SettingsFormEditor extends React.Component<
     }
   }
 
+  private _getFilteredFormData(
+    filteredSchema?: ISettingRegistry.ISchema
+  ): ReadonlyJSONObject {
+    if (!filteredSchema?.properties) {
+      return this._formData;
+    }
+    const filteredFormData = JSONExt.deepCopy(
+      this._formData as PartialJSONObject
+    );
+    for (const field in filteredFormData) {
+      if (!filteredSchema.properties[field]) {
+        delete filteredFormData[field];
+      }
+    }
+    return filteredFormData as ReadonlyJSONObject;
+  }
+
   private _debouncer: Debouncer<void, any>;
-  private _formData: any;
-  private _templateFactory: RJSFTemplatesFactory;
+  private _formData: ReadonlyJSONObject;
 }

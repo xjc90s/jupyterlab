@@ -10,9 +10,17 @@ contributing!
 
 Please take a look at the Contributor documentation, familiarize
 yourself with using JupyterLab, and introduce yourself to the community
-(on the mailing list or discourse) and share what area of the project
-you are interested in working on. Please also see the Jupyter `Community
+(on the `chat <https://gitter.im/jupyterlab/jupyterlab>`__ and/or the `forum <https://discourse.jupyter.org/c/jupyterlab/17>`__)
+and share what area of the project you are interested in working on. Please also see the Jupyter `Community
 Guides <https://jupyter.readthedocs.io/en/latest/community/content-community.html>`__.
+
+You can help make it better by:
+- `submitting bug reports <https://github.com/jupyterlab/jupyterlab/issues/new/choose>`__,
+- `proposing new features <https://github.com/jupyterlab/jupyterlab/issues/new?assignees=&labels=enhancement%2C+status%3ANeeds+Triage&template=feature_request.md>`__,
+- `translating the application <https://crowdin.com/project/jupyterlab>`__,
+- `improving the documentation <https://jupyterlab.readthedocs.io/en/latest>`__,
+- improving the code base and fixing bug (see below)
+
 
 We have labeled some issues as `good first
 issue <https://github.com/jupyterlab/jupyterlab/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22>`__
@@ -56,10 +64,33 @@ Documentation <https://jupyter.readthedocs.io/en/latest/contributing/content-con
 and `Code of
 Conduct <https://github.com/jupyter/governance/blob/master/conduct/code_of_conduct.md>`__.
 
+.. _versioning_notes:
+
+Backwards Compatibility, Versions and Breaking Changes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+New versions of JupyterLab may break backwards compatibility with extensions and other Jupyter
+customizations. Breaking changes are kept to a minimum where possible. JupyterLab development
+and release cycles follow `semantic versioning <https://semver.org/>`__, so when breaking
+changes are necessary, they are communicated via the version numbering scheme. In short, this
+means that, for a JupyterLab version X.Y.Z:
+
+- Major version (X) number changes indicate breaking changes (NOT backwards compatible)
+- Minor Version (Y) number changes indicate a backwards compatible addition of new features
+- Patch version (Z) number changes indicate backwards compatible bug fixes
+
+Contributions to JupyterLab extensions and other customizations should plan for possible
+breaking changes. Consider documenting your maintenance plans to users in these projects.
+You may also wish to consider pinning the major version of JupyterLab when developing
+extensions (in your package metadata).
+
 We maintain the **two most recently released major versions of JupyterLab**,
 JupyterLab v2 and JupyterLab v3. After JupyterLab v4 is released, we will no
-longer maintain v2.
-All JupyterLab v2 users are strongly advised to upgrade as soon as possible.
+longer maintain v2. All JupyterLab v2 users are strongly advised to upgrade
+as soon as possible.
+
+Languages, Tools and Processes
+------------------------------
 
 All source code is written in
 `TypeScript <https://www.typescriptlang.org/Handbook>`__. See the `Style
@@ -258,32 +289,23 @@ about 7 minutes again.
 Setting up a local development environment
 ------------------------------------------
 This section explains how to set up a local development environment. We assume you use GNU/Linux,
-Mac OS X, or Windows Subsystem for Linux.
+macOS, or Windows Subsystem for Linux.
 
 Installing Node.js and jlpm
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Building JupyterLab from its GitHub source code requires Node.js. The
-development version requires Node.js version 12+, as defined in the
+development version requires Node.js version 18+, as defined in the
 ``engines`` specification in
 `dev_mode/package.json <https://github.com/jupyterlab/jupyterlab/blob/master/dev_mode/package.json>`__.
 
-If you use ``conda``, you can get it with:
+If you use `conda <https://conda.io>`__, you can get it with:
 
 .. code:: bash
 
    conda install -c conda-forge nodejs
 
-The canvas node package is not properly packaged for Mac OS X with ARM architectures (M1 and M2).
-To build JupyterLab on such platforms, you need a few additional packages, and to specify the pkg-config
-path:
-
-.. code:: bash
-
-   conda install -c conda-forge pkg-config pango libpng cairo jpeg giflib librsvg glib
-   export PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig
-
-If you use `Homebrew <https://brew.sh>`__ on Mac OS X:
+If you use `Homebrew <https://brew.sh>`__ on macOS:
 
 .. code:: bash
 
@@ -297,6 +319,24 @@ To check which version of Node.js is installed:
 .. code:: bash
 
    node -v
+
+.. _Installing Node.js and jlpm section:
+
+The canvas node package is not properly packaged for macOS with ARM architectures (M1 and M2).
+To build JupyterLab on such platforms, you need a few additional packages:
+
+With conda:
+
+.. code:: bash
+
+   conda install -c conda-forge pkg-config pango libpng cairo jpeg giflib librsvg glib pixman
+   export PKG_CONFIG_PATH=$CONDA_PREFIX/lib/pkgconfig
+
+With Homebrew:
+
+.. code:: bash
+
+   brew install pkg-config cairo pango libpng jpeg giflib librsvg
 
 Using automation to set up a local development environment
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -350,11 +390,8 @@ Notes:
 -  If you see an error that says ``Call to 'pkg-config pixman-1 --libs'
    returned exit status 127 while in binding.gyp`` while running the
    ``pip install`` command above, you may be missing packages required
-   by ``canvas``. On macOS with Homebrew, you can add these packages by
-   running
-   ``brew install pkg-config cairo pango libpng jpeg giflib librsvg``.
-   If you are using mamba or conda, you can install the necessary packages
-   with `conda install -c conda-forge pkg-config glib pango pixman`.
+   by ``canvas``. Please see `Installing Node.js and jlpm section`_
+   of this guide for instructions on how to install these packages.
 -  The ``jlpm`` command is a JupyterLab-provided, locked version of the
    `yarn <https://classic.yarnpkg.com/en/>`__ package manager. If you have
    ``yarn`` installed already, you can use the ``yarn`` command when
@@ -443,6 +480,14 @@ appropriate package folder:
     ``--runInBand`` option will run all tests serially in the current process.
     We advice to use it as some tests are spinning a Jupyter Server that does not
     like to be executed in parallel.
+
+If you see a test run fail with ``Library not loaded: '@rpath/libpixman-1.0.dylib'``
+(or a different library, such as ``libcairo.2.dylib`` for Mac computers with Apple
+Silicon chips) while running the
+``jlpm test`` command above, you may be missing packages required
+by ``canvas``. Please see
+`Installing Node.js and jlpm section`_
+of this guide for instructions on how to install these packages.
 
 We use ``jest`` for all tests, so standard ``jest`` workflows apply.
 Tests can be debugged in either VSCode or Chrome. It can help to add an
@@ -773,7 +818,7 @@ need to install the documentation dependencies with ``pip``:
 
 .. code:: bash
 
-   pip install -e .[docs]
+   pip install -e ".[docs]"
 
 
 To test the docs run:
